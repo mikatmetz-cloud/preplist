@@ -824,7 +824,16 @@ function App(){
     }
 
     ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
-  </script>
+  <script>
+async function refreshData() {
+  const res = await fetch('data.json?' + Date.now()); // prevent caching
+  const data = await res.json();
+  document.getElementById('list').innerHTML = 
+    data.items.map(i => `<li>${i}</li>`).join('');
+}
+refreshData();
+setInterval(refreshData, 5000); // update every 5 seconds
+</script>
 </body>
 </html>
 /* /index.html 200
