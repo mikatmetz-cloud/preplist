@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Interactive Prep List v2.2 — Full Build</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    :root{
+      --header:#f4a261;
+      --border:#cfcfcf;
+      --row:#ffffff;
+      --rowAlt:#fafafa;
+      --on:#c7e9c0;
+      --prep:#fde68a;
+      --shared:#add8e6;
+      --highlight:#39FF14;
+    }
+    *{box-sizing:border-box}
+    body{font-family:system-ui, Arial, sans-serif;margin:0;background:#f5f6f8;color:#111;}
+    #root{padding:16px;max-width:1200px;margin:0 auto;}
+    .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+    .bar button,.bar select{padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:#fff;cursor:pointer}
+    .legend{display:flex;gap:16px;align-items:center;padding:8px 12px;font-size:12px;background:#fff;border:1px solid var(--border);border-radius:10px}
+    .swatch{display:inline-block;width:14px;height:14px;border:1px solid #999;margin-right:6px;border-radius:3px}
+    .card{background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.06);overflow:hidden;margin-top:10px}
+    table{width:100%;border-collapse:collapse;font-size:14px;}
+    th,td{border:1px solid var(--border);padding:8px 10px;vertical-align:middle}
+    th.dish{background:var(--header);color:#fff;font-weight:800;font-size:15px;cursor:pointer}
+    tr.shared td{background:var(--shared)!important}
+    tr.row-hi td{background:var(--highlight)!important}
+    tr:nth-child(even) td.body{background:var(--rowAlt)}
+    td.body{background:var(--row)}
+    td.name{font-weight:600;cursor:pointer}
+    td.toggle{cursor:pointer;text-align:center;width:90px}
+    td.toggle.on{background:var(--on)}
+    td.toggle.prep{background:var(--prep)}
+    td.notes input{width:100%;padding:6px;border:1px solid var(--border);border-radius:8px}
+    td.star { width:48px; text-align:center }
+    td.star button{padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:#fff;cursor:pointer}
+    @media print{ .bar,.legend,.overlay{display:none!important} body{background:#fff} th.dish{color:#000} }
+    .overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:16px;z-index:100}
+    .modal{background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.25);width:min(900px,95vw);max-height:90vh;overflow:auto}
+    .modal header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid var(--border);font-weight:800}
+    .modal section{padding:12px 14px}
+    .row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .row input[type=text]{flex:1;border:1px solid var(--border);border-radius:8px;padding:8px}
+    .row button{padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;cursor:pointer}
+    .comp-list{display:grid;grid-template-columns:1fr auto auto auto;gap:8px}
+    .comp-empty{color:#666;font-style:italic}
+    .muted{color:#555}
+    .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    .grid .box{border:1px solid var(--border);border-radius:10px;padding:10px}
+    .checkbox{margin-right:6px}
+  
+body.compact { font-size: 11px; }
+body.compact th, body.compact td { padding: 2px 4px; font-size: 11px; }
+body.compact .bar button, body.compact .bar select { padding: 2px 4px; font-size: 11px; }
+body.compact .legend { font-size: 9px; gap: 4px; padding: 2px 4px; }
+body.compact .card { margin-top: 2px; box-shadow: none; }
+body.compact table { font-size: 11px; }
+body.compact .modal section { padding: 6px; font-size: 11px; }
+body.compact pre, body.compact textarea, body.compact input { font-size: 11px; }
+
+@media print {
+  body.compact { font-size: 9px; }
+  body.compact th, body.compact td { padding: 1px 2px; font-size: 9px; }
+  .bar, .legend, .overlay { display:none!important }
+  .card { margin-top: 0; box-shadow:none; }
+  tr, .card, th.dish { page-break-inside: avoid; }
+}
+
+
+.missing-recipe {
+  color: red;
+  font-weight: bold;
+  margin-left: 4px;
+}
+
+</style>
+
+
+
+</head>
+<body className={compactMode ? "compact" : ""}>
+  <div id="root"></div>
+  <script type="text/babel">
+    const uid = () => Math.random().toString(36).slice(2);
+
+    const PRELOAD = [
+      { name:"Local Salad", items:["Sweet chili vinaigrette","Watermelon batonnet","Green apple batonnet","Cucumber batonnet","Mint (picked)","Basil (picked)","Kinome (picked)","Sunburst tomatoes, quartered","EVOO","Pea shoots"] },
+      { name:"Country Ham", items:["Benton’s ham, thin slice","Citrus-Cured Figs"] },
+      { name:"Corn Ribs", items:["Corn Ribs","Butter","Chili-lime seasoning","Lime Cheek"] },
+      { name:"Carrots", items:["Carrots portioned","Harissa Buffalo Sauce","Hazelnut gremolata","Whipped Ricotta","Orange Segments","Dill","Parsley","Mint","Chives"] },
+      { name:"Crazy Fries", items:["Potatoes blanched/frozen","Chive aioli","Comté, grated","Chives, cut"] },
+      { name:"Broccoli", items:["Roasted broccoli, portioned","Calabrian chili aioli","Rice Flour","Sweet lemon","Roasted Marcona almonds"] },
+      { name:"Cornbread", items:["Cornbread, baked","Whipped maple butter","Honey & Maple"] },
+      { name:"Seared Trout", items:["Fish portioned","Dill-marinated peppers","Tahini sauce","Black oil","Red oil","EVOO"] },
+      { name:"Little Gem Salad", items:["Buttermilk Dressing","Pickled Red Onion","Cleaned Little Gem Lettuce","Parmesan cut correctly","Breadcrumbs"] },
+      { name:"Golden Tilefish", items:["Fish Wrapped","Fish “Rolled”","Zucchini, blanched","Tomato, peeled","Gochujang tomato sauce","Anchovy vierge","Corn fritter","Vadouvan + MSG spice","Honey-mustard Kale","Maitake Mushroom","Red shiso","Chili oil"] },
+      { name:"Hanger Steak", items:["Steak, marinated","Celeriac purée","Salsa macha","Shishito peppers","Shishito relish"] },
+      { name:"Date Blondie", items:["White Choc-Pecan Crumble","Vanilla Gelato","Stamped Blondies","Maldon salt"] },
+      { name:"Burger", items:["3 oz patty balls","Sesame seed buns","Tallow Remoulade","‘Merican cheese","Potato wedges","Burger spice","Must Chup"] },
+      { name:"Eton Mess", items:["Tonka meringue","Pink lemonade granita","Cherries, pitted & halved","Lemon zest","Cherry-bitters gummies","Mascarpone vanilla cream"] },
+      { name:"Grilled Cabbage", items:["Confit cabbage, portioned","Gooseberry pico de gallo","Mint","Cilantro","Tomato curry","Onion bhaji"] },
+      { name:"Chicken Confit", items:["Truffle Polenta","Honey-mustard Kale","Maitake Mushroom","Chicken Jus","Chicken Thigh Confit","Chives","Doenjang","Whole Grain mustard","Maldon"] }
+    ];
+    const sharedSet = (()=>{
+      const c={}; PRELOAD.forEach(d=>d.items.forEach(i=>c[i]=(c[i]||0)+1));
+      return new Set(Object.keys(c).filter(k=>c[k]>1));
+    })();
+
+    const RECIPE_MAP = {
+  "[Component Name]": `[Recipe text or placeholder]
+
+===============================`,
+  "Sweet chili vinaigrette": `Ingredients
+  - 260 g Seafood Mae Ploy
+  - 460 g Fresh Lime Juice
+  - 1 Green Thai Chili, finely sliced
+  Method
+  1. Finely slice the chili.
+  2. Combine with Mae Ploy and lime juice.
+  3. Whisk until incorporated.`,
+  "Watermelon batonnet": `Cut into 2¼ × ¼ × ¼ inch batonnet.`,
+  "Green apple batonnet": `Cut into 2¼ × ¼ × ¼ inch batonnet.`,
+  "Cucumber batonnet": `- Cut into 2¼ × ¼ × ¼ inch batonnet.
+  - Toss in 50/50 mix of salt and sugar.
+  - Allow to sit for 45 minutes.
+  - Store with sports towel.`,
+  "Mint (picked)": `Store in ice water.`,
+  "Basil (picked)": `Store in ice water.`,
+  "Kinome (picked)": `Store in ice water.`,
+  "Sunburst tomatoes, quartered": `Quarter and reserve with sports towel.`,
+  "EVOO (squeeze bottle)": `Portion EVOO into squeeze bottle for service.`,
+  "Pea shoots": `Store in ice water.`,
+  "Benton’s ham, thin slice": `Slice thin, no recipe required.`,
+  "Citrus-Cured Figs": `[RECIPE NOT YET ENTERED]`,
+  "Corn Ribs": `- Cut ends off ear of corn.
+  - Cut ear in half laying flat, then stand up the half and cut through the cob.
+  - Cut that half in half again. Reserve.`,
+  "Butter": `Melt and keep warm for service.`,
+  "Chili-lime seasoning": `- 20 g Cajun
+  - 20 g Tajin
+  - 20 g MSG
+  - 20 g Salt`,
+  "Lime Cheek": `Cut cheek of lime.`,
+  "Carrots portioned": `[RECIPE NOT YET ENTERED]`,
+  "Harissa Buffalo Sauce": `[RECIPE NOT YET ENTERED]`,
+  "Hazelnut gremolata": `[RECIPE NOT YET ENTERED]`,
+  "Whipped Ricotta": `[RECIPE NOT YET ENTERED]`,
+  "Orange Segments": `[RECIPE NOT YET ENTERED]`,
+  "Dill": `[RECIPE NOT YET ENTERED]`,
+  "Parsley": `[RECIPE NOT YET ENTERED]`,
+  "Mint": `Pick leaves, reserve in container until service.`,
+  "Chives": `[RECIPE NOT YET ENTERED]`,
+  "Potatoes blanched/frozen": `[RECIPE NOT YET ENTERED]`,
+  "Chive aioli": `Ingredients
+  - 3,584 g Mayo (1 gallon)
+  - 72 g Salt
+  - 53 g Garlic, microplaned
+  - 108 g Chives
+  - 484 g Lemon juice
+  Method
+  1. Whisk all ingredients together until smooth.`,
+  "Comté, grated": `Grate Comté cheese.`,
+  "Chives, cut": `Cut chives correctly for garnish.`,
+  "Roasted broccoli, portioned": `- Cut florets, not too small.
+  - Toss with salt and blended oil.
+  - Roast on parchment at 400°F, low fan, for 8 minutes.
+  - Cool and store.`,
+  "Calabrian chili aioli": `Ingredients
+  - 1 gallon Mayo
+  - 500 g Calabrian chili
+  - 400 g Confit garlic
+  - 30 g Lemon zest
+  - 100 g Raw garlic, grated
+  - 120 g Lemon juice
+  - 10 g MSG
+  - 40 g Salt
+  - 100 g Parsley
+  - 15 g Marjoram
+  - 15 g Paprika
+  Method
+  1. Robo Coupe the chili, parsley, confit garlic, and marjoram.
+  2. Grate lemon rind and raw garlic.
+  3. Combine all ingredients and mix until smooth.`,
+  "Rice Flour": `Store in shaker for dredging/use.`,
+  "Sweet lemon": `Ingredients
+  - 250 g Lemon juice
+  - 100 g Palm sugar
+  Method
+  1. Mix half of lemon juice and all of palm sugar in saucepan.
+  2. Heat until sugar is dissolved.
+  3. Add remaining lemon juice and cool.`,
+  "Roasted Marcona almonds": `- Roast almonds.
+  - Blitz in Robo Coupe until coarse.`,
+  "Cornbread, baked": `- 2000 g batter
+  - 60 g jalapeño, chopped
+  - 200 g tumbleweed cheddar, grated
+  Method
+  1. Fold jalapeño and cheddar into batter.
+  2. Pour into pan and bake until set and golden.`,
+  "Whipped maple butter": `Yield: ~610 g
+  Ingredients
+  - 445 g Tempered butter
+  - 100 g Maple syrup
+  - 60 g Honey
+  - 3 g Salt
+  - 1 g MSG
+  Method
+  1. In a mixer, whip butter until pale and aerated.
+  2. Add remaining ingredients.
+  3. Whip until emulsified.`,
+  "Honey & Maple": `[RECIPE NOT YET ENTERED]`,
+  "Fish portioned": `[RECIPE NOT YET ENTERED]`,
+  "Dill-marinated peppers": `Ingredients
+  - 160 g Anaheim chili, finely julienned (½ inch length)
+  - 5 g Salt
+  - 5 g Sugar
+  - 5 g Fresh dill
+  - 1 g Dry oregano
+  - 5 g Lemon zest
+  - 85 g Lemon juice
+  - 45 g EVOO
+  - 10 g Fish sauce
+  - 20 g Chives
+  Method
+  1. Finely julienne Anaheim chilies to uniform size.
+  2. Toss with salt and sugar.
+  3. Combine with remaining ingredients and mix well.`,
+  "Tahini sauce (Pine Nut Tahini)": `Ingredients
+  - 2 quarts Oat milk
+  - 3 Garlic cloves
+  - 1 cup Fresh lemon juice
+  - ½ cup Fish sauce
+  - 1 lb Tahini
+  - Salt and pepper TT
+  Method
+  1. Roast gooseberries in light oil at 400°F for 15 minutes until blistered (optional step if included in mise).
+  2. Cool slightly, then combine all ingredients.
+  3. Blend until smooth, season with salt and pepper.`,
+  "Black oil": `[RECIPE NOT YET ENTERED]`,
+  "Red oil (Gochugaru Oil)": `Ingredients
+  - 500 g Gochugaru
+  - 2000 g Neutral oil
+  Method
+  1. Heat oil to 325°F.
+  2. Place chili in fine mesh chinois over a bain marie.
+  3. Pour hot oil over chili, press through.
+  4. Return oil to pot, repeat process twice.
+  5. Cool in walk-in.`,
+  "Buttermilk Dressing": `[RECIPE NOT YET ENTERED]`,
+  "Pickled Red Onion": `Ingredients
+  - 10 Red onions, sliced
+  - 1 quart Lime juice
+  - 1 quart White vinegar
+  - 200 g Sugar
+  - 100 g Salt
+  Method
+  1. Slice onions thinly.
+  2. Combine lime juice, vinegar, sugar, and salt until dissolved.
+  3. Add onions to liquid, store until pickled.`,
+  "Cleaned Little Gem Lettuce": `Clean and prep lettuce leaves.`,
+  "Parmesan cut correctly": `Portion Parmesan and cut correctly for service.`,
+  "Breadcrumbs": `- Cook panko on low heat in 50/50 butter and blended oil until golden.
+  - Strain.
+  - Finish with grated garlic and lemon zest.`,
+  "Pasta portioned": `Ingredients
+  - 600 g AP flour
+  - 6 Eggs
+  - 8 g Turmeric
+  - 10 g White vinegar
+  - 20 g EVOO
+  - 3 g Salt
+  Method
+  1. Combine all ingredients, knead into smooth dough.
+  2. Rest, roll, and portion as needed.`,
+  "Tomato cleaned (1/2 ed)": `- Cut sungold tomatoes in half.
+  - Reserve in pint containers lined with sports towel.`,
+  "Whipped ricotta (Whipped Lemon Ricotta)": `Yield: ~2 quarts
+  Ingredients
+  - 2 quarts Ricotta
+  - Juice of 2 Lemons
+  - Peel of 2 Lemons
+  - 30 g Salt
+  - ½ Nutmeg
+  Method
+  1. Combine all ingredients in a Robocoupe.
+  2. Whip until smooth.`,
+  "Yeast butter": `Yield: ~4 lbs
+  Ingredients
+  - 4 lbs Tempered butter
+  - 600 g Nutritional yeast
+  - 80 g Salt
+  - 20 g Turmeric
+  Method
+  1. Blend yeast, salt, and turmeric into fine powder.
+  2. Whip butter with seasoning mix until emulsified.
+  3. Transfer to quarts and cool immediately.`,
+  "Basil": `Pick leaves for garnish.`,
+  "Lemon juice": `Juice lemons, reserve.`,
+  "Aleppo pepper": `Have Aleppo pepper measured and reserved for service.`,
+  "Fish Wrapped": `[RECIPE NOT YET ENTERED]`,
+  "Fish “Rolled”": `[RECIPE NOT YET ENTERED]`,
+  "Zucchini, blanched": `[RECIPE NOT YET ENTERED]`,
+  "Tomato, peeled": `[RECIPE NOT YET ENTERED]`,
+  "Gochujang tomato sauce": `[RECIPE NOT YET ENTERED]`,
+  "Anchovy vierge": `[RECIPE NOT YET ENTERED]`,
+  "Corn fritter": `[RECIPE NOT YET ENTERED]`,
+  "Vadouvan + MSG spice": `[RECIPE NOT YET ENTERED]`,
+  "Honey-mustard Kale": `[RECIPE NOT YET ENTERED]`,
+  "Maitake Mushroom": `[RECIPE NOT YET ENTERED]`,
+  "Red shiso": `[RECIPE NOT YET ENTERED]`,
+  "Chili oil": `[RECIPE NOT YET ENTERED]`,
+  "Steak, marinated": `[RECIPE NOT YET ENTERED]`,
+  "Celeriac purée": `[RECIPE NOT YET ENTERED]`,
+  "Salsa macha": `[RECIPE NOT YET ENTERED]`,
+  "Shishito peppers": `[RECIPE NOT YET ENTERED]`,
+  "Shishito relish": `[RECIPE NOT YET ENTERED]`,
+  "White Choc-Pecan Crumble": `[RECIPE NOT YET ENTERED]`,
+  "Vanilla Gelato": `[RECIPE NOT YET ENTERED]`,
+  "Stamped Blondies": `Blondie Base Recipe:
+  - Dates
+  - Japanese white sweet potato
+  - Flour
+  - Sugar
+  - Eggs
+  Method: Blend dates and sweet potato, fold into batter, bake.`,
+  "Miso Toffee": `Ingredients
+  - 2 cans dulce de leche (14 oz each, simmered in water 3 hrs)
+  - 300 g cream
+  - 100 g butter
+  - 1 vanilla bean, seeds
+  - 1 pinch kosher salt
+  - 120 g Aka miso
+  Method
+  1. Combine dulce de leche, cream, butter, vanilla, salt.
+  2. Add miso, immersion blend, store in pastry bags.`,
+  "Maldon salt": `[RECIPE NOT YET ENTERED]`,
+  "Burnt Honey Cream": `[RECIPE NOT YET ENTERED]`,
+  "3 oz patty balls": `[RECIPE NOT YET ENTERED]`,
+  "Sesame seed buns": `[RECIPE NOT YET ENTERED]`,
+  "Tallow Remoulade": `[RECIPE NOT YET ENTERED]`,
+  "‘Merican cheese": `[RECIPE NOT YET ENTERED]`,
+  "Potato wedges": `[RECIPE NOT YET ENTERED]`,
+  "Burger spice": `[RECIPE NOT YET ENTERED]`,
+  "Must Chup": `[RECIPE NOT YET ENTERED]`,
+  "Tonka meringue": `Ingredients
+  - Egg whites
+  - Sugar
+  - Tonka bean, finely grated
+  Method
+  1. Whip egg whites to soft peaks, gradually add sugar until stiff.
+  2. Fold in tonka bean, pipe, bake until crisp.`,
+  "Pink lemonade granita": `[RECIPE NOT YET ENTERED]`,
+  "Cherries, pitted & halved": `[RECIPE NOT YET ENTERED]`,
+  "Lemon zest": `[RECIPE NOT YET ENTERED]`,
+  "Cherry-bitters gummies": `Ingredients
+  - Cherry purée
+  - Sugar
+  - Gelatin
+  - Citric acid
+  - Grenadine
+  - Cherry bitters
+  Method
+  1. Bloom gelatin. Heat puree + sugar.
+  2. Add gelatin, acid, grenadine, bitters. Pour into mold, set.`,
+  "Mascarpone vanilla cream": `Ingredients
+  - Mascarpone
+  - Cream
+  - Sugar
+  - Vanilla extract
+  Method
+  1. Whip cream with sugar and vanilla.
+  2. Fold into mascarpone until smooth.`,
+  "Confit cabbage, portioned": `Ingredients
+  - 2000 g Neutral oil
+  - 10 g Star anise
+  - 3 g Cinnamon stick
+  - 3 g Clove
+  - 15 g Black pepper
+  - 7 g Bay leaf
+  - 45 g Garlic
+  - 5 g Cardamom
+  Method
+  1. Toast aromatics in dry pan until aromatic and lightly smoking.
+  2. Transfer to hotel pan, add oil.
+  3. Place cabbage halves in pan, add enough oil to nearly submerge.
+  4. Cover with parchment, cook at 250°F for 2 hours until tender.
+  5. Strain and reserve oil. Remove cabbage gently for service.`,
+  "Gooseberry pico de gallo": `Ingredients
+  - 700 g Roasted gooseberries
+  - 40 g Jalapeño, fine brunoise
+  - 40 g Shallots, fine brunoise
+  - 20 g Cilantro, fine julienne
+  - 50 g Fresh lime juice
+  - 270 g Raw gooseberries, halved
+  - 10 g Sugar
+  Method
+  1. Roast gooseberries at 400°F for 15 minutes until blistered.
+  2. Cool, then combine with remaining ingredients.`,
+  "Cilantro": `Pick leaves, reserve in container until service.`,
+  "Tomato curry": `[RECIPE NOT YET ENTERED]`,
+  "Onion bhaji": `Ingredients
+  - Red onion, thinly sliced on mandoline
+  - Chicken dredge, as needed
+  - Sparkling water, as needed
+  - Vadouvan MSG spice, as needed
+  Method
+  1. Cut onion halves, peel, slice thin.
+  2. Prepare dredge and batter (1:1.5 ratio with sparkling water).
+  3. Coat onions in dredge, shake excess, dip in batter.
+  4. Fry at 325°F for 3–5 minutes.
+  5. Drain on rack, dust with Vadouvan MSG spice.`,
+  "Vadouvan MSG Spice": `Ingredients
+  - 300 g Vadouvan curry
+  - 200 g MSG
+  - 200 g Sugar
+  - 180 g Salt
+  - 10 g Cayenne
+  - 15 g Citric acid
+  Method
+  1. Blend all ingredients into smooth powder.`,
+  "Truffle Polenta": `[RECIPE NOT YET ENTERED]`,
+  "Chicken Jus": `[RECIPE NOT YET ENTERED]`,
+  "Chicken Thigh Confit": `[RECIPE NOT YET ENTERED]`,
+  "Doenjang": `[RECIPE NOT YET ENTERED]`,
+  "Whole Grain mustard": `[RECIPE NOT YET ENTERED]`,
+  "Maldon": `[RECIPE NOT YET ENTERED]`
+};
+
+let USER_RECIPES = JSON.parse(localStorage.getItem("ipl-v2.2-user-recipes") || "{}");
+
+function scaleRecipe(text, factor){
+  if(!text) return text;
+  return text.replace(/(\d+(?:\.\d+)?)(?=\s*(g|kg|ml|l|oz|cups?|cup|tbsp|tsp|quart|pint|lb|lbs))/gi,
+    (match, num, unit)=> {
+      let scaled = parseFloat(num) * factor;
+      let str = (Math.round(scaled*100)/100).toString();
+      return str + " " + unit;
+    });
+}
+
+
+function App(){
+      const [dishes,setDishes] = React.useState(()=>{
+        const c = localStorage.getItem("ipl-v2.2-dishes");
+        return c ? JSON.parse(c) : PRELOAD.map(d=>({id:uid(),...d}));
+      });
+      const [cells,setCells] = React.useState(()=>{
+        const c = localStorage.getItem("ipl-v2.2-cells"); return c?JSON.parse(c):{};
+      });
+      const [rowHi,setRowHi] = React.useState(()=>{
+        const c = localStorage.getItem("ipl-v2.2-rowhi"); return c?JSON.parse(c):{};
+      });
+      const [notes,setNotes] = React.useState(()=>{
+        const c = localStorage.getItem("ipl-v2.2-notes"); return c?JSON.parse(c):{};
+      });
+      const [view,setView] = React.useState(()=>{
+        const c = localStorage.getItem("ipl-v2.2-view"); return c?JSON.parse(c):{mode:"full", filter:"all", dishId:null};
+      });
+      const [recipeModal,setRecipeModal] = React.useState(null);
+      const [editModal,setEditModal] = React.useState(null);
+      const [addModal,setAddModal] = React.useState(null);
+      const [compactMode,setCompactMode] = React.useState(false);
+      const [scale,setScale] = React.useState(1);
+      const [editRecipe,setEditRecipe] = React.useState(false);
+      const [draftRecipe,setDraftRecipe] = React.useState("");
+
+      const [dailySel,setDailySel] = React.useState(()=>{
+        const c = localStorage.getItem("ipl-v2.2-daily"); return c?JSON.parse(c):{enabled:false, items:{}};
+      });
+
+      React.useEffect(()=>localStorage.setItem("ipl-v2.2-dishes",JSON.stringify(dishes)),[dishes]);
+      React.useEffect(()=>localStorage.setItem("ipl-v2.2-cells",JSON.stringify(cells)),[cells]);
+      React.useEffect(()=>localStorage.setItem("ipl-v2.2-rowhi",JSON.stringify(rowHi)),[rowHi]);
+      React.useEffect(()=>localStorage.setItem("ipl-v2.2-notes",JSON.stringify(notes)),[notes]);
+      React.useEffect(()=>localStorage.setItem("ipl-v2.2-view",JSON.stringify(view)),[view]);
+      React.useEffect(()=>localStorage.setItem("ipl-v2.2-daily",JSON.stringify(dailySel)),[dailySel]);
+
+      const key = (dishId,item) => dishId+"|"+item;
+
+      function toggleCell(dishId,item,kind){
+        const k = key(dishId,item)+"|"+kind;
+        setCells(s=>({...s,[k]: !s[k]}));
+      }
+      function toggleRow(dishId,item){
+        const k = key(dishId,item);
+        setRowHi(s=>({...s,[k]: !s[k]}));
+      }
+      function updateNote(dishId,item,val){
+        const k = key(dishId,item);
+        setNotes(n=>({...n,[k]: val}));
+      }
+
+      function openRecipe(dishId,item){ setRecipeModal({dishId,item}); }
+      function openDishEditor(dishId){
+        const d = dishes.find(x=>x.id===dishId);
+        setEditModal({dishId, draftName:d.name, draftItems:d.items.slice(), addBuffer:"", bulkBuffer:""});
+      }
+      function saveDishEditor(){
+        const {dishId,draftName,draftItems} = editModal;
+        setDishes(ds=> ds.map(d=> d.id===dishId? {...d, name:draftName.trim()||d.name, items:draftItems.filter(x=>x.trim()!=="")} : d));
+        setEditModal(null);
+      }
+      function removeItem(idx){
+        setEditModal(m=>{ const a=m.draftItems.slice(); a.splice(idx,1); return {...m,draftItems:a}; });
+      }
+      function moveItem(idx,dir){
+        setEditModal(m=>{
+          const a=m.draftItems.slice(); const j=idx+dir; if(j<0||j>=a.length) return m;
+          [a[idx],a[j]]=[a[j],a[idx]]; return {...m,draftItems:a};
+        });
+      }
+      function addItem(){
+        setEditModal(m=> m.addBuffer.trim()? {...m, draftItems:[...m.draftItems, m.addBuffer.trim()], addBuffer:""} : m);
+      }
+      function addBulk(){
+        setEditModal(m=>{
+          const lines = m.bulkBuffer.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+          if(!lines.length) return m;
+          return {...m, draftItems:[...m.draftItems, ...lines], bulkBuffer:""};
+        });
+      }
+      function deleteDish(){
+        if(!confirm("Delete this dish? This cannot be undone.")) return;
+        const id = editModal.dishId;
+        const toDeleteItems = dishes.find(d=>d.id===id)?.items || [];
+        setDishes(ds=> ds.filter(d=>d.id!==id));
+        setRowHi(s=>{ const n={...s}; toDeleteItems.forEach(it=>delete n[id+"|"+it]); return n;});
+        setCells(s=>{ const n={...s}; Object.keys(n).forEach(k=>{ if(k.startsWith(id+"|")) delete n[k];}); return n;});
+        setNotes(s=>{ const n={...s}; Object.keys(n).forEach(k=>{ if(k.startsWith(id+"|")) delete n[k];}); return n;});
+        setDailySel(s=>{ const n={...s}; const items={...n.items}; Object.keys(items).forEach(k=>{ if(k.startsWith(id+"|")) delete items[k];}); n.items=items; return n;});
+        setEditModal(null);
+      }
+
+      function openAddDish(){ setAddModal({name:"", comps:["","","",""]}); }
+      function addDishField(){ setAddModal(m=>({...m, comps:[...m.comps,""]})); }
+      function removeDishField(i){
+        setAddModal(m=>{ const a=m.comps.slice(); a.splice(i,1); return {...m, comps:a.length?a:[""]}; });
+      }
+      function saveNewDish(){
+        const name = (addModal.name||"").trim();
+        const comps = (addModal.comps||[]).map(s=>s.trim()).filter(Boolean);
+        if(!name || !comps.length){ alert("Dish name and at least one component required."); return; }
+        setDishes(ds=>[...ds, {id:uid(), name, items:comps}]);
+        setAddModal(null);
+      }
+
+      function openDailyPicker(){ setAddModal({dailyPicker:true}); }
+      function saveDailySelection(){
+        const boxes = document.querySelectorAll('.daily-pick');
+        const sel = {}; boxes.forEach(b=>{ if(b.checked) sel[b.dataset.key]=true; });
+        setDailySel({enabled:true, items: sel});
+        setView(v=>({...v, mode:"daily"}));
+        setAddModal(null);
+      }
+
+      const filtered = (dish) => {
+        if(view.filter==="all") return true;
+        if(view.filter==="dish") return view.dishId===dish.id;
+        if(view.filter==="highlighted"){
+          // render header only if at least one row highlighted (and also shown if daily mode + chosen)
+          return dish.items.some(it => {
+            const k = dish.id+"|"+it;
+            const hi = !!rowHi[k];
+            const inDaily = view.mode!=="daily" || !!(dailySel.items && dailySel.items[k]);
+            return hi && inDaily;
+          });
+        }
+        return true;
+      };
+
+      return (
+        <div>
+          <div className="bar">
+            <button onClick={()=>window.print()}>Print</button>
+            <button onClick={()=>setCompactMode(m=>!m)}>{compactMode ? "Exit Compact Mode" : "Compact Mode"}</button>
+            <button onClick={()=>{
+              const filename = prompt("Enter filename for save (e.g. my_prep.json):","prep.json");
+              if(!filename) return;
+              const data = {dishes, cells, rowHi, notes, view, dailySel, USER_RECIPES};
+              const blob = new Blob([JSON.stringify(data)], {type:"application/json"});
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = filename;
+              a.click();
+            }}>Save Iteration</button>
+            <input type="file" style={{display:"none"}} id="loadFileInput" onChange={e=>{
+              const file = e.target.files[0];
+              if(!file) return;
+              const reader = new FileReader();
+              reader.onload = ev => {
+                try{
+                  const data = JSON.parse(ev.target.result);
+                  setDishes(data.dishes||[]);
+                  setCells(data.cells||{});
+                  setRowHi(data.rowHi||{});
+                  setNotes(data.notes||{});
+                  setView(data.view||{mode:"full", filter:"all", dishId:null});
+                  setDailySel(data.dailySel||{enabled:false, items:{}});
+                  USER_RECIPES = data.USER_RECIPES||{};
+                  localStorage.setItem("ipl-v2.2-user-recipes", JSON.stringify(USER_RECIPES));
+                } catch(err){ alert("Error loading file"); }
+              };
+              reader.readAsText(file);
+            }}/>
+            <button onClick={()=>document.getElementById("loadFileInput").click()}>Load Iteration</button>
+            <button onClick={openAddDish}>+ Add Dish</button>
+            <select value={view.filter} onChange={e=>{
+              const f=e.target.value;
+              if(f==="dish" && !view.dishId && dishes[0]) setView({...view, filter:f, dishId:dishes[0].id});
+              else setView({...view, filter:f});
+            }}>
+              <option value="all">Show: All dishes</option>
+              <option value="dish">Show: One dish…</option>
+              <option value="highlighted">Show: Highlighted only</option>
+            </select>
+            {view.filter==="dish" && (
+              <select value={view.dishId||""} onChange={e=>setView({...view, dishId:e.target.value})}>
+                {dishes.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+              </select>
+            )}
+            {view.mode==="daily"
+              ? <button onClick={()=>setView({...view, mode:"full"})}>Exit Daily List</button>
+              : <button onClick={openDailyPicker}>Daily List</button>}
+          </div>
+
+          <div className="legend">
+            <span><span className="swatch" style={{background:"var(--on)"}}></span>On Hand</span>
+            <span><span className="swatch" style={{background:"var(--prep)"}}></span>Prep</span>
+            <span><span className="swatch" style={{background:"var(--highlight)"}}></span>Row Highlight</span>
+            <span><span className="swatch" style={{background:"var(--shared)"}}></span>Shared Component</span>
+            <span className="muted">Click dish header to edit, component to open recipe.</span>
+          </div>
+
+          <div className="card">
+            <table><tbody>
+              {dishes.filter(filtered).map(dish => {
+                const rows = dish.items.map(item => {
+                  const k = dish.id+"|"+item;
+                  const inDaily = view.mode!=="daily" || !!(dailySel.items && dailySel.items[k]);
+                  const hiFilter = view.filter!=="highlighted" || !!rowHi[k];
+                  if(!inDaily || !hiFilter) return null;
+                  const shared = sharedSet.has(item);
+                  return (
+                    <tr key={k} className={(shared?"shared ":"")+(rowHi[k]?"row-hi":"")}>
+                      <td className="body name" onClick={()=>openRecipe(dish.id,item)}>{item} {!(USER_RECIPES[item] || RECIPE_MAP[item]) && <span className="missing-recipe">⚠️</span>}</td>
+                      <td className={"body toggle "+(cells[k+"|on"]?"on":"")} onClick={()=>toggleCell(dish.id,item,"on")}>On Hand</td>
+                      <td className={"body toggle "+(cells[k+"|prep"]?"prep":"")} onClick={()=>toggleCell(dish.id,item,"prep")}>Prep</td>
+                      <td className="body notes"><input value={notes[k]||""} onChange={e=>updateNote(dish.id,item,e.target.value)} placeholder="X (notes/info)"/></td>
+                      <td className="body star"><button title="Row highlight" onClick={()=>toggleRow(dish.id,item)}>★</button></td>
+                    </tr>
+                  );
+                });
+                return (
+                  <React.Fragment key={dish.id}>
+                    <tr><th className="dish" colSpan="5" onClick={()=>openDishEditor(dish.id)}>{dish.name}</th></tr>
+                    {rows}
+                  </React.Fragment>
+                );
+              })}
+            </tbody></table>
+          </div>
+
+          {recipeModal && (
+            <div className="overlay" onClick={()=>setRecipeModal(null)}>
+              <div className="modal" onClick={(e)=>e.stopPropagation()}>
+                <header>
+                  <div>Recipe — {(()=>{
+                    const d=dishes.find(x=>x.id===recipeModal.dishId);
+                    const missing = !(USER_RECIPES[recipeModal.item] || RECIPE_MAP[recipeModal.item]);
+                    return (d?d.name:"") + ": " + recipeModal.item + (missing ? " ⚠️ No Recipe" : "");
+                  })()}</div>
+                  <button onClick={()=>setRecipeModal(null)}>Close</button>
+                </header>
+                <section>
+                  <div style={{marginBottom:"8px"}}>
+      <label>Scale: </label>
+      <input type="number" step="0.1" min="0.1" value={scale} onChange={e=>setScale(parseFloat(e.target.value)||1)} style={{width:"80px"}}/> x
+    </div>
+    {editRecipe ? (
+      <div>
+        <textarea value={draftRecipe} onChange={e=>setDraftRecipe(e.target.value)} rows="12" style={{width:"100%"}}/>
+        <div style={{marginTop:"8px"}}>
+          <button onClick={()=>{
+            USER_RECIPES[recipeModal.item]=draftRecipe;
+            localStorage.setItem("ipl-v2.2-user-recipes", JSON.stringify(USER_RECIPES));
+            setEditRecipe(false);
+          }}>Save Recipe</button>
+          <button onClick={()=>setEditRecipe(false)}>Cancel</button>
+        </div>
+      </div>
+    ) : (
+      <div>
+        <pre style={{whiteSpace:"pre-wrap"}}>
+          {scaleRecipe(USER_RECIPES[recipeModal.item] || RECIPE_MAP[recipeModal.item] || "[RECIPE NOT YET ENTERED]", scale)}
+        </pre>
+        <button onClick={()=>{setDraftRecipe(USER_RECIPES[recipeModal.item] || RECIPE_MAP[recipeModal.item] || ""); setEditRecipe(true)}}>Edit Recipe</button>
+      </div>
+    )}
+                </section>
+              </div>
+            </div>
+          )}
+
+          {editModal && (
+            <div className="overlay" onClick={()=>setEditModal(null)}>
+              <div className="modal" onClick={(e)=>e.stopPropagation()}>
+                <header>
+                  <div>Edit Dish</div>
+                  <div style={{display:"flex", gap:"8px"}}>
+                    <button onClick={()=>setEditModal(null)}>Cancel</button>
+                    <button onClick={deleteDish} style={{borderColor:"#dc2626", color:"#dc2626"}}>Delete Dish</button>
+                    <button onClick={saveDishEditor}><strong>Save Changes</strong></button>
+                  </div>
+                </header>
+                <section>
+                  <div className="row">
+                    <label style={{width:120}}>Dish name</label>
+                    <input type="text" value={editModal.draftName} onChange={e=>setEditModal(m=>({...m,draftName:e.target.value}))}/>
+                  </div>
+                  <div className="row">
+                    <label style={{width:120}}>Add component</label>
+                    <input type="text" value={editModal.addBuffer} onChange={e=>setEditModal(m=>({...m,addBuffer:e.target.value}))} placeholder="Type component and click Add"/>
+                    <button onClick={addItem}>Add</button>
+                  </div>
+                  <div className="row" style={{alignItems:"flex-start"}}>
+                    <label style={{width:120, marginTop:"8px"}}>Bulk add</label>
+                    <textarea rows="4" style={{flex:1, border:"1px solid var(--border)", borderRadius:"8px", padding:"8px"}} placeholder="Paste one component per line" value={editModal.bulkBuffer} onChange={e=>setEditModal(m=>({...m,bulkBuffer:e.target.value}))}></textarea>
+                    <button onClick={addBulk}>Add Lines</button>
+                  </div>
+                  <div className="comp-list">
+                    <strong>Component</strong><span></span><span></span><span></span>
+                    {editModal.draftItems.length? editModal.draftItems.map((c,idx)=>(
+                      <React.Fragment key={idx}>
+                        <input type="text" value={c} onChange={e=>setEditModal(m=>{ const a=m.draftItems.slice(); a[idx]=e.target.value; return {...m,draftItems:a};})}/>
+                        <button onClick={()=>moveItem(idx,-1)}>Up</button>
+                        <button onClick={()=>moveItem(idx,1)}>Down</button>
+                        <button onClick={()=>removeItem(idx)} style={{borderColor:"#dc2626", color:"#dc2626"}}>Remove</button>
+                      </React.Fragment>
+                    )): <div className="comp-empty">No components yet</div>}
+                  </div>
+                </section>
+              </div>
+            </div>
+          )}
+
+          {addModal && !addModal.dailyPicker && (
+            <div className="overlay" onClick={()=>setAddModal(null)}>
+              <div className="modal" onClick={(e)=>e.stopPropagation()}>
+                <header>
+                  <div>Add Dish</div>
+                  <button onClick={()=>setAddModal(null)}>Close</button>
+                </header>
+                <section>
+                  <div className="row">
+                    <label style={{width:120}}>Dish name</label>
+                    <input type="text" value={addModal.name||""} onChange={e=>setAddModal(m=>({...m,name:e.target.value}))} placeholder="e.g., New Dish Name"/>
+                  </div>
+                  <div className="row" style={{alignItems:"flex-start"}}>
+                    <label style={{width:120, marginTop:"8px"}}>Components</label>
+                    <div style={{flex:1}}>
+                      {(addModal.comps||["","","",""]).map((c,i)=>(
+                        <div className="row" key={i}>
+                          <input type="text" value={c} onChange={e=>{
+                            const v=e.target.value;
+                            setAddModal(m=>{ const a=(m.comps||["","","",""]).slice(); a[i]=v; return {...m, comps:a}; });
+                          }} placeholder={"Component "+(i+1)}/>
+                          <button onClick={()=>removeDishField(i)}>Remove</button>
+                        </div>
+                      ))}
+                      <button onClick={addDishField}>+ Add field</button>
+                    </div>
+                  </div>
+                </section>
+                <section style={{display:"flex", justifyContent:"flex-end", gap:"8px"}}>
+                  <button onClick={()=>setAddModal(null)}>Cancel</button>
+                  <button onClick={()=>saveNewDish()}><strong>Save Dish</strong></button>
+                </section>
+              </div>
+            </div>
+          )}
+
+          {addModal && addModal.dailyPicker && (
+            <div className="overlay" onClick={()=>setAddModal(null)}>
+              <div className="modal" onClick={(e)=>e.stopPropagation()}>
+                <header>
+                  <div>Create Daily Checklist</div>
+                  <div style={{display:"flex", gap:"8px"}}>
+                    <button onClick={()=>{ setAddModal(null); }}>Cancel</button>
+                    <button onClick={()=>saveDailySelection()}><strong>Save Daily List</strong></button>
+                  </div>
+                </header>
+                <section>
+                  <p className="muted">Select the components you are responsible for today. This list will persist until you reset it.</p>
+                  <div className="grid">
+                    {dishes.map(d=>(
+                      <div key={d.id} className="box">
+                        <strong>{d.name}</strong>
+                        <div>
+                          {d.items.map(it=>{
+                            const k = d.id+"|"+it;
+                            return (
+                              <div key={k}>
+                                <input className="daily-pick checkbox" type="checkbox" data-key={k} defaultChecked={!!(dailySel.items && dailySel.items[k])} id={k}/>
+                                <label htmlFor={k}>{it}</label>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>
+/* /index.html 200
